@@ -135,7 +135,11 @@ The current version still provides a **complete architectural overview**, **func
 
 Included Assets:
 - 🖼️ **UI Screenshot** — Available in the `/assets` folder, showcasing the Streamlit interface and visualization controls.  
-- 🎥 **Demo Video** — Available in the `/assets` folder. A walkthrough of the end-to-end query flow, from natural language input to SQL generation and visualization.  
+- 🎥 **Demo Video** — Available in the `/assets` folder. A walkthrough of the end-to-end query flow, from natural language input to SQL generation and visualization.
+- ### Demo Video
+[![Smart Data Exploration Agent Demo](assets/demo_thumbnail.png)](assets/Smart%20Data%20Exploration%20Agent%20%E2%80%93%20Demo.mp4)
+*Click the thumbnail to watch the end-to-end demo.*
+ 
 
 This approach ensures the repository remains **educational, demonstrative, and portfolio-ready**, while protecting proprietary implementation details.
 
