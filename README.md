@@ -135,7 +135,7 @@ The current version still provides a **complete architectural overview**, **func
 
 Included Assets:
 - 🖼️ **UI Screenshot** — Available in the `/assets` folder, showcasing the Streamlit interface and visualization controls.  
-- 🎥 **Demo Video** — Available in the `/assets` folder. A walkthrough of the end-to-end query flow, from natural language input to SQL generation and visualization.  
+- 🎥 **Demo Video** — Available in the `/assets` folder. A walkthrough of the end-to-end query flow, from natural language input to SQL generation and visualization.
 
 This approach ensures the repository remains **educational, demonstrative, and portfolio-ready**, while protecting proprietary implementation details.
 
