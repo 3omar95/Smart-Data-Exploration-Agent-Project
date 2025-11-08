@@ -4,8 +4,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
 
 import streamlit as st
 
@@ -13,7 +12,7 @@ from llm_router import LLMRouter
 from custom_agent import SmartDataAgent
 
 
-def visualize_with_seaborn(df: pd.DataFrame):
+def visualize_with_plotly(df: pd.DataFrame):
     try:
         if df.empty:
             st.warning("No data returned.")
@@ -22,33 +21,40 @@ def visualize_with_seaborn(df: pd.DataFrame):
         st.subheader("Choose visualization options")
 
         x_col = st.selectbox("X Axis", df.columns)
-        y_col = st.selectbox("Y Axis (optional)", list(df.columns))
+        y_col = st.selectbox("Y Axis (optional)", [None] + list(df.columns))
         chart_type = st.selectbox(
             "Chart Type",
             ["bar", "line", "scatter", "histogram", "box"]
         )
         if st.button("Render Chart"):
-            fig, ax = plt.subplots(figsize=(8, 5))
+            fig = None
 
             if chart_type == "bar":
-                sns.barplot(data=df, x=x_col, y=y_col, ax=ax)
+                fig = px.bar(df, x=x_col, y=y_col, title=f"{chart_type.title()} Chart")
             elif chart_type == "line":
-                sns.lineplot(data=df, x=x_col, y=y_col, ax=ax)
+                fig = px.line(df, x=x_col, y=y_col, title=f"{chart_type.title()} Chart")
             elif chart_type == "scatter":
-                sns.scatterplot(data=df, x=x_col, y=y_col, ax=ax)
+                fig = px.scatter(df, x=x_col, y=y_col, title=f"{chart_type.title()} Chart")
             elif chart_type == "histogram":
-                sns.histplot(data=df, x=x_col, ax=ax, kde=True)
+                fig = px.histogram(df, x=x_col, title=f"{chart_type.title()} Chart", marginal="box")
             elif chart_type == "box":
-                sns.boxplot(data=df, x=x_col, y=y_col, ax=ax)
+                fig = px.box(df, x=x_col, y=y_col, title=f"{chart_type.title()} Chart")
 
-            plt.xticks(rotation=30)
-            st.pyplot(fig)
+            fig.update_layout(
+                xaxis_title=x_col,
+                yaxis_title=y_col if y_col else "",
+                title_x=0.5,
+                template="plotly_white",
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
         st.error(f"Failed to visualize: {e}")
 
 BASE_DIR = os.getcwd()
-DB_PATH = os.path.join(BASE_DIR, 'sales_demo.db')
+DB_NAME = 'ml.db'
+DB_PATH = os.path.join(BASE_DIR, DB_NAME)
 
 st.set_page_config(page_title='Smart Data Exploration Agent – Demo', layout='wide')
 st.title('🧠 Smart Data Exploration Agent – Demo (SQLite)')
@@ -71,11 +77,21 @@ model = st.sidebar.text_input(
 )
 st.sidebar.caption('Set API keys as env vars: OPENAI_API_KEY or ANTHROPIC_API_KEY')
 
-if not os.path.exists(DB_PATH):
-    st.error("Database not found. Please ensure 'sales_demo.db' exists in the same folder.")
-    st.stop()
+if ("initialized" not in st.session_state) or (provider != st.session_state.provider):
+    if not os.path.exists(DB_PATH):
+        st.error(f"Database not found. Please ensure '{DB_NAME}' exists in the same folder.")
+        st.stop()
+    st.session_state.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    router = LLMRouter(provider=provider, model=model)
+    st.session_state.agent = SmartDataAgent(
+        con=st.session_state.conn,
+        router=router
+    )
+    st.session_state.provider = provider
+    st.session_state.setdefault('show_viz', False)
+    st.session_state.setdefault('show_quick_viz', False)
+    st.session_state.initialized = True
 
-conn = sqlite3.connect(DB_PATH)
 
 st.subheader('⚡ Quick Queries')
 QUERY_MAP = {
@@ -91,7 +107,7 @@ choice = st.selectbox('Pick a query', list(QUERY_MAP.keys()))
 sql_quick = QUERY_MAP[choice]
 st.code(sql_quick, language='sql')
 if st.button('Run quick query'):
-    df_quick = pd.read_sql_query(sql_quick, conn)
+    df_quick = pd.read_sql_query(sql_quick, st.session_state.conn)
     st.session_state['df_quick'] = df_quick
     st.session_state['show_quick_viz'] = False
 
@@ -101,8 +117,8 @@ if 'df_quick' in st.session_state:
         st.session_state['show_quick_viz'] = True
 
 if st.session_state.get('show_quick_viz', False):
-    visualize_with_seaborn(st.session_state['df_quick'])
-    if st.button('Hide Visualization'):
+    visualize_with_plotly(st.session_state['df_quick'])
+    if st.button('Hide Quick Visualization'):
         st.session_state['show_quick_viz'] = False
 
 st.markdown('---')
@@ -113,22 +129,24 @@ nl = st.text_area("Ask a data question (e.g., 'Show revenue by product category 
 col1, col2 = st.columns(2)
 with col1:
     if st.button('Generate SQL'):
+        st.session_state['success_df'] = False
         if not nl.strip():
             st.warning('Please enter a question.')
         else:
             try:
-                router = LLMRouter(provider=provider, model=model)
-                agent = SmartDataAgent(
-                    con=conn,
-                    router=router
-                )
-                df, sql_generated = agent.ask(nl)
-                st.success('Generated SQL:')
-                st.code(sql_generated, language='sql')
+                with st.spinner("Thinking..."):
+                    df, sql_generated = st.session_state.agent.ask(nl)
                 st.session_state['generated_sql'] = sql_generated
-                st.session_state['df'] = df
+                st.session_state['last_df'] = df
+                st.session_state.success_sql = True
             except Exception as e:
                 st.error(f'Failed to generate SQL: {e}')
+                st.session_state.success_sql = False
+
+    if st.session_state.get('generated_sql', False):
+        st.success('Generated SQL:')
+        st.code(st.session_state['generated_sql'], language='sql')
+
 
 with col2:
     if st.button('Run generated SQL'):
@@ -136,12 +154,12 @@ with col2:
         if not sql_generated:
             st.warning("No generated SQL to run. Click 'Generate SQL' first.")
         else:
-            try:
-                df = st.session_state.get('df')
-                st.dataframe(df)
-                st.session_state['last_df'] = df
-            except Exception as e:
-                st.error(f'Query execution failed: {e}')
+            st.session_state['success_df'] = True
+
+    if st.session_state.get('success_df', False):
+        st.dataframe(st.session_state['last_df'])
+
+
 
 if 'last_df' in st.session_state and not st.session_state['last_df'].empty:
     st.markdown("---")
@@ -152,6 +170,6 @@ if 'last_df' in st.session_state and not st.session_state['last_df'].empty:
 
     if 'last_df' in st.session_state and not st.session_state['last_df'].empty:
         if st.session_state.get('show_viz', False):
-            visualize_with_seaborn(st.session_state['last_df'])
+            visualize_with_plotly(st.session_state['last_df'])
             if st.button('Hide Visualization'):
                 st.session_state['show_viz'] = False
